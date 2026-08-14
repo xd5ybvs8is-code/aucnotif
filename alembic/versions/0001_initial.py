@@ -20,7 +20,7 @@ def upgrade() -> None:
         "users",
         sa.Column("id", sa.BigInteger(), primary_key=True),
         sa.Column("telegram_id", sa.BigInteger(), nullable=False),
-        sa.Column("timezone", sa.String(length=64), nullable=False, server_default="Europe/London"),
+        sa.Column("timezone", sa.String(length=64), nullable=False, server_default="Europe/Moscow"),
         sa.Column("language", sa.String(length=8), nullable=False, server_default="ru"),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),

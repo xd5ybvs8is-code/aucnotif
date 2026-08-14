@@ -1,5 +1,5 @@
 from datetime import UTC, datetime
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, available_timezones
 
 JST = ZoneInfo("Asia/Tokyo")
 YAHOO_DATETIME_FORMATS = ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M")
@@ -28,6 +28,10 @@ def parse_yahoo_datetime(value: str, tz: ZoneInfo = JST) -> datetime:
             continue
         return naive.replace(tzinfo=tz).astimezone(UTC)
     raise YahooDatetimeParseError(f"Unparseable Yahoo datetime: {value!r}")
+
+
+def is_valid_timezone(tz_name: str) -> bool:
+    return tz_name in available_timezones()
 
 
 def to_user_tz(dt: datetime, tz_name: str) -> datetime:

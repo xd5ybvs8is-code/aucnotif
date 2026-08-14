@@ -17,11 +17,18 @@ class UserRepository:
     async def get_or_create(self, telegram_id: int, timezone: str, language: str) -> User:
         user = await self.get_by_telegram_id(telegram_id)
         if user is not None:
-            if user.timezone != timezone:
-                user.timezone = timezone
-                await self._session.flush()
             return user
         user = User(telegram_id=telegram_id, timezone=timezone, language=language)
         self._session.add(user)
+        await self._session.flush()
+        return user
+
+    async def set_timezone(self, telegram_id: int, timezone: str) -> User:
+        user = await self.get_by_telegram_id(telegram_id)
+        if user is None:
+            user = User(telegram_id=telegram_id, timezone=timezone)
+            self._session.add(user)
+        else:
+            user.timezone = timezone
         await self._session.flush()
         return user

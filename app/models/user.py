@@ -9,7 +9,7 @@ class User(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(PrimaryKey, primary_key=True)
     telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True, nullable=False)
-    timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="Europe/London")
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="Europe/Moscow")
     language: Mapped[str] = mapped_column(String(8), nullable=False, default="ru")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 

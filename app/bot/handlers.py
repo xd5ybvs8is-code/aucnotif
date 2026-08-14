@@ -11,7 +11,7 @@ from aiogram.types import (
 
 from app.config import get_settings
 from app.db import get_session_factory
-from app.domain.time import format_price, format_user_time
+from app.domain.time import format_price, format_user_time, is_valid_timezone
 from app.domain.validation import InvalidAuctionUrl
 from app.infrastructure.container import get_worker_provider
 from app.notifications.renderer import NotificationRenderer
@@ -31,6 +31,8 @@ HELP_TEXT = (
     "https://page.auctions.yahoo.co.jp/jp/auction/XXXXX\n\n"
     "Команды:\n"
     "/list — список отслеживаемых аукционов\n"
+    "/timezone — посмотреть часовой пояс\n"
+    "/timezone <часовой пояс> — сменить пояс, например /timezone Europe/Moscow\n"
     "/help — справка\n\n"
     "Уведомления: за 30, 15 и 5 минут до окончания, "
     "при каждой новой ставке и продлении аукциона."
@@ -94,6 +96,35 @@ def register_handlers(dp: Dispatcher) -> None:
             "\n".join(lines),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard_rows),
         )
+
+    @router.message(Command("timezone"))
+    async def cmd_timezone(message: Message) -> None:
+        tz_name = (message.text or "").partition(" ")[2].strip()
+        if not tz_name:
+            async with get_service() as service:
+                user = await service.get_user(message.from_user.id)
+            if user is not None:
+                await message.answer(
+                    f"Текущий часовой пояс: {user.timezone}\n"
+                    "Сменить: /timezone <часовой пояс>, например /timezone Europe/Berlin"
+                )
+            else:
+                await message.answer(
+                    "Часовой пояс пока не задан.\n"
+                    "Сменить: /timezone <часовой пояс>, например /timezone Europe/Moscow"
+                )
+            return
+
+        if not is_valid_timezone(tz_name):
+            await message.answer(
+                "❌ Неизвестный часовой пояс. Укажите название из базы IANA, "
+                "например: /timezone Europe/Moscow"
+            )
+            return
+
+        async with get_service() as service:
+            await service.set_timezone(message.from_user.id, tz_name)
+        await message.answer(f"✅ Часовой пояс установлен: {tz_name}")
 
     @router.message(Command("watch"))
     async def cmd_watch(message: Message) -> None:

@@ -7,6 +7,7 @@ from app.domain.time import (
     YahooDatetimeParseError,
     format_price,
     format_user_time,
+    is_valid_timezone,
     parse_yahoo_datetime,
 )
 
@@ -43,6 +44,13 @@ def test_format_price():
     assert format_price(24000) == "¥24,000"
     assert format_price(0) == "¥0"
     assert format_price(None) == "—"
+
+
+def test_is_valid_timezone():
+    assert is_valid_timezone("Europe/Moscow") is True
+    assert is_valid_timezone("Asia/Tokyo") is True
+    assert is_valid_timezone("Not/AZone") is False
+    assert is_valid_timezone("") is False
 
 
 def test_naive_datetime_never_returned():

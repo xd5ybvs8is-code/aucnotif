@@ -111,5 +111,13 @@ class AuctionService:
         items = await self.user_auctions.list_for_user(user.id)
         return user, items
 
+    async def set_timezone(self, telegram_id: int, timezone: str) -> User:
+        user = await self.users.set_timezone(telegram_id, timezone)
+        await self._session.commit()
+        return user
+
+    async def get_user(self, telegram_id: int) -> User | None:
+        return await self.users.get_by_telegram_id(telegram_id)
+
     async def get_state(self, url: str) -> AuctionState:
         return await self._provider.get_auction_state(url)
