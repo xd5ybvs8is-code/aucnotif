@@ -1,0 +1,25 @@
+{
+  "navigation": {
+    "pageName": "PRODUCT",
+    "isLogin": 0,
+    "isForeign": 1,
+    "device": "PC"
+  },
+  "items": {
+    "productID": "h111222333",
+    "productName": "PS5 デジタル・エディション",
+    "productCategoryID": "2084290227",
+    "price": "55000",
+    "starttime": "2026-08-11 09:00:00",
+    "endtime": "2026-08-13 20:00:00",
+    "winPrice": "",
+    "quantity": "1",
+    "bids": "42",
+    "isStore": "0",
+    "isAdult": "0",
+    "isClosed": "1",
+    "hasWinner": "1",
+    "newBid": "1",
+    "enableBooth": "0"
+  }
+}

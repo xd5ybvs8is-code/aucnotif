@@ -1,0 +1,25 @@
+{
+  "navigation": {
+    "pageName": "PRODUCT",
+    "isLogin": 0,
+    "isForeign": 1,
+    "device": "PC"
+  },
+  "items": {
+    "productID": "g987654321",
+    "productName": "Nintendo Switch 有機ELモデル ホワイト",
+    "productCategoryID": "2084290227",
+    "price": "1000",
+    "starttime": "2026-08-10 10:00:00",
+    "endtime": "2026-08-20 22:00:00",
+    "winPrice": "",
+    "quantity": "1",
+    "bids": "0",
+    "isStore": "1",
+    "isAdult": "0",
+    "isClosed": "0",
+    "hasWinner": "0",
+    "newBid": "0",
+    "enableBooth": "1"
+  }
+}

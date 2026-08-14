@@ -1,0 +1,93 @@
+from html import escape
+
+from app.domain.auction_state import AuctionState
+from app.domain.notifications import NotificationDecision, NotificationKind
+from app.domain.time import format_price, format_user_time
+
+
+class NotificationRenderer:
+    """Форматирует тексты уведомлений в timezone пользователя (HTML parse mode)."""
+
+    def __init__(self, timezone_name: str) -> None:
+        self._tz = timezone_name
+
+    @staticmethod
+    def _link(url: str) -> str:
+        return f'<a href="{escape(url)}">Открыть аукцион</a>'
+
+    @staticmethod
+    def _title(state: AuctionState) -> str:
+        return escape(state.title or "Без названия")
+
+    def render(self, decision: NotificationDecision, url: str) -> str:
+        current = decision.current
+        previous = decision.previous
+        if current is None:
+            return "Аукцион недоступен."
+
+        title = self._title(current)
+        if decision.kind == NotificationKind.T_30M:
+            return self._header("🔔 До окончания аукциона 30 минут", title, current, url)
+        if decision.kind == NotificationKind.T_15M:
+            return self._header("🔔 До окончания 15 минут", title, current, url)
+        if decision.kind == NotificationKind.T_5M:
+            return self._header("⚠️ До окончания аукциона 5 минут", title, current, url)
+        if decision.kind == NotificationKind.CLOSED:
+            lines = ["🏁 Аукцион завершён", "", f"🎮 {title}"]
+            if current.current_price is not None:
+                lines.append(f"💴 Итоговая ставка: {format_price(current.current_price)}")
+            if current.has_winner:
+                lines.append("✅ Победитель определён")
+            lines.append("")
+            lines.append(self._link(url))
+            return "\n".join(lines)
+        if decision.kind == NotificationKind.EXTENSION:
+            lines = ["⏰ Аукцион продлён", "", f"🎮 {title}"]
+            if previous and previous.end_time and current.end_time:
+                lines.append("")
+                lines.append(f"Было: {format_user_time(previous.end_time, self._tz)}")
+                lines.append(f"Стало: {format_user_time(current.end_time, self._tz)}")
+            lines.append("")
+            lines.append(self._link(url))
+            return "\n".join(lines)
+        # CHANGE
+        lines = ["🔴 Изменение аукциона", "", f"🎮 {title}", ""]
+        if previous is not None:
+            if current.current_price is not None and previous.current_price != current.current_price:
+                lines.append(
+                    f"💴 Ставка: {format_price(previous.current_price)} → {format_price(current.current_price)}"
+                )
+            if current.bid_count is not None and previous.bid_count != current.bid_count:
+                lines.append(f"👥 Ставок: {previous.bid_count} → {current.bid_count}")
+            if current.end_time is not None and previous.end_time != current.end_time:
+                lines.append(
+                    f"⏰ Окончание: {format_user_time(previous.end_time, self._tz)} → "
+                    f"{format_user_time(current.end_time, self._tz)}"
+                )
+        lines.append("")
+        lines.append(self._link(url))
+        return "\n".join(lines)
+
+    def render_added(self, state: AuctionState, url: str) -> str:
+        lines = ["✅ Аукцион добавлен", "", f"🎮 {self._title(state)}"]
+        if state.current_price is not None:
+            lines.append(f"💴 Текущая ставка: {format_price(state.current_price)}")
+        if state.bid_count is not None:
+            lines.append(f"👥 Ставок: {state.bid_count}")
+        if state.end_time is not None:
+            lines.append(f"⏰ Окончание: {format_user_time(state.end_time, self._tz)}")
+        lines.append("")
+        lines.append(self._link(url))
+        return "\n".join(lines)
+
+    def _header(self, header: str, title: str, state: AuctionState, url: str) -> str:
+        lines = [header, "", f"🎮 {title}"]
+        if state.current_price is not None:
+            lines.append(f"💴 Текущая ставка: {format_price(state.current_price)}")
+        if state.bid_count is not None:
+            lines.append(f"👥 Ставок: {state.bid_count}")
+        if state.end_time is not None:
+            lines.append(f"⏰ Окончание: {format_user_time(state.end_time, self._tz)}")
+        lines.append("")
+        lines.append(self._link(url))
+        return "\n".join(lines)

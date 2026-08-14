@@ -1,0 +1,102 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: auknotif
+      POSTGRES_PASSWORD: auknotif
+      POSTGRES_DB: auknotif
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U auknotif"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build: .
+    command: alembic upgrade head
+    environment:
+      DATABASE_URL: postgresql+asyncpg://auknotif:auknotif@postgres:5432/auknotif
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build: .
+    command: python -m app.main_api
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://auknotif:auknotif@postgres:5432/auknotif
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  bot:
+    build: .
+    command: python -m app.main_bot
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://auknotif:auknotif@postgres:5432/auknotif
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  scheduler:
+    build: .
+    command: python -m app.main_scheduler
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://auknotif:auknotif@postgres:5432/auknotif
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    build: .
+    command: arq app.workers.settings.WorkerSettings
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://auknotif:auknotif@postgres:5432/auknotif
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    deploy:
+      replicas: 2
+
+volumes:
+  pgdata:
