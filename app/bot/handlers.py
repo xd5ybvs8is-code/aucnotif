@@ -32,7 +32,7 @@ HELP_TEXT = (
     "Команды:\n"
     "/list — список отслеживаемых аукционов\n"
     "/timezone — посмотреть часовой пояс\n"
-    "/timezone <часовой пояс> — сменить пояс, например /timezone Europe/Moscow\n"
+    "/timezone &lt;часовой пояс&gt; — сменить пояс, например /timezone Europe/Moscow\n"
     "/help — справка\n\n"
     "Уведомления: за 30, 15 и 5 минут до окончания, "
     "при каждой новой ставке и продлении аукциона."
@@ -130,7 +130,7 @@ def register_handlers(dp: Dispatcher) -> None:
     async def cmd_watch(message: Message) -> None:
         url = (message.text or "").partition(" ")[2].strip()
         if not url:
-            await message.answer("Формат: /watch <ссылка на аукцион Yahoo>")
+            await message.answer("Формат: /watch &lt;ссылка на аукцион Yahoo&gt;")
             return
         await _handle_url(message, url)
 
