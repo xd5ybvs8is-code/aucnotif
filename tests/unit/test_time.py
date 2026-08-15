@@ -6,8 +6,10 @@ import pytest
 from app.domain.time import (
     YahooDatetimeParseError,
     format_price,
+    format_timezone,
     format_user_time,
     is_valid_timezone,
+    normalize_utc_offset,
     parse_yahoo_datetime,
 )
 
@@ -51,6 +53,45 @@ def test_is_valid_timezone():
     assert is_valid_timezone("Asia/Tokyo") is True
     assert is_valid_timezone("Not/AZone") is False
     assert is_valid_timezone("") is False
+
+
+def test_normalize_utc_offset_canonical():
+    assert normalize_utc_offset("UTC+3") == "UTC+3"
+    assert normalize_utc_offset("UTC-5") == "UTC-5"
+    assert normalize_utc_offset("UTC+0") == "UTC+0"
+    assert normalize_utc_offset("UTC+5:30") == "UTC+5:30"
+
+
+def test_normalize_utc_offset_case_and_spaces():
+    assert normalize_utc_offset("utc+3") == "UTC+3"
+    assert normalize_utc_offset("  UTC -5  ") == "UTC-5"
+    assert normalize_utc_offset("UTC +3") == "UTC+3"
+
+
+def test_normalize_utc_offset_invalid():
+    assert normalize_utc_offset("") is None
+    assert normalize_utc_offset("Europe/Moscow") is None
+    assert normalize_utc_offset("UTC15") is None
+    assert normalize_utc_offset("UTC+15") is None
+    assert normalize_utc_offset("UTC-13") is None
+    assert normalize_utc_offset("UTC+5:99") is None
+    assert normalize_utc_offset("UTC+5:20") is None
+    assert normalize_utc_offset("foo") is None
+
+
+def test_format_timezone_offset_and_labels():
+    assert format_timezone("UTC+3") == "UTC+3 (Москва)"
+    assert format_timezone("UTC+9") == "UTC+9 (Токио)"
+    assert format_timezone("UTC-5") == "UTC-5"
+    assert format_timezone("UTC+5:30") == "UTC+5:30"
+    assert format_timezone("Europe/Moscow") == "UTC+3 (Москва)"
+
+
+def test_user_timezone_conversion_utc_offset():
+    dt = datetime(2026, 8, 13, 13, 40, 31, tzinfo=UTC)
+    assert format_user_time(dt, "UTC+9") == "22:40"
+    assert format_user_time(dt, "UTC-5") == "08:40"
+    assert format_user_time(dt, "UTC+3") == "16:40"
 
 
 def test_naive_datetime_never_returned():

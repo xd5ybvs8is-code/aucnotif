@@ -111,6 +111,22 @@ class AuctionService:
         items = await self.user_auctions.list_for_user(user.id)
         return user, items
 
+    async def toggle_notifications(self, telegram_id: int, external_id: str) -> bool | None:
+        """Переключает уведомления для аукциона. Возвращает новое значение или None, если не найдено."""
+        user = await self.users.get_by_telegram_id(telegram_id)
+        if user is None:
+            return None
+        auction = await self.auctions.get_by_external_id(external_id)
+        if auction is None:
+            return None
+        link = await self.user_auctions.get(user.id, auction.id)
+        if link is None:
+            return None
+        new_value = not link.notifications_enabled
+        await self.user_auctions.set_notifications_enabled(user.id, auction.id, new_value)
+        await self._session.commit()
+        return new_value
+
     async def set_timezone(self, telegram_id: int, timezone: str) -> User:
         user = await self.users.set_timezone(telegram_id, timezone)
         await self._session.commit()

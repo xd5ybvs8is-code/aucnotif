@@ -4,6 +4,8 @@ import logging
 import structlog
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import BotCommand
 
 from app.config import get_settings
 from app.db import dispose_engine
@@ -35,12 +37,13 @@ async def main() -> None:
         token=settings.telegram_bot_token,
         default=DefaultBotProperties(parse_mode="HTML"),
     )
-    dp = Dispatcher()
+    dp = Dispatcher(storage=MemoryStorage())
 
     from app.bot.handlers import register_handlers
 
     register_handlers(dp)
 
+    await bot.set_my_commands([BotCommand(command="start", description="Главное меню")])
     await bot.delete_webhook(drop_pending_updates=True)
     logger.info("bot_started", mode="polling")
     try:
