@@ -1,3 +1,4 @@
+import math
 from contextlib import asynccontextmanager
 
 from aiogram import Dispatcher, F, Router
@@ -15,7 +16,7 @@ from aiogram.types import (
 from app.bot.keyboards import back_menu_kb, main_menu_kb
 from app.config import get_settings
 from app.db import get_session_factory
-from app.domain.time import format_price, format_remaining
+from app.domain.time import JST, ensure_aware, format_price, format_remaining
 from app.domain.validation import InvalidAuctionUrl
 from app.infrastructure.container import get_worker_provider
 from app.notifications.renderer import NotificationRenderer
@@ -69,43 +70,105 @@ async def _edit_or_answer(callback: CallbackQuery, text: str, kb: InlineKeyboard
         await callback.message.answer(text, reply_markup=kb)
 
 
-async def _list_content(service: AuctionService, telegram_id: int) -> tuple[str, InlineKeyboardMarkup] | None:
+PAGE_SIZE = 9
+
+LIST_HEADER_TEXT = "🎯 Отслеживаемые аукционы:"
+
+
+def _format_dt(dt) -> str | None:
+    aware = ensure_aware(dt)
+    if aware is None:
+        return None
+    return aware.astimezone(JST).strftime("%Y-%m-%d %H:%M")
+
+
+def _auction_text(link, auction) -> str:
+    title = link.label or auction.title or "Без названия"
+    status = "🏁 завершён" if auction.is_closed else "👀 активен"
+    lines = [f"🎮 {title}", f"Статус: {status}", ""]
+    if auction.current_price is not None:
+        lines.append(f"💴 Текущая ставка: {format_price(auction.current_price)}")
+    if auction.bid_count is not None:
+        lines.append(f"👥 Ставок: {auction.bid_count}")
+    if auction.buy_now_price is not None:
+        lines.append(f"🛒 Купить сейчас: {format_price(auction.buy_now_price)}")
+    if auction.quantity is not None:
+        lines.append(f"📦 Количество: {auction.quantity}")
+    if auction.is_store is not None:
+        lines.append(f"🏪 Магазин: {'да' if auction.is_store else 'нет'}")
+    start = _format_dt(auction.start_time)
+    if start is not None:
+        lines.append(f"🕐 Начало (JST): {start}")
+    if auction.end_time is not None:
+        if not auction.is_closed:
+            lines.append(f"⏰ До конца: {format_remaining(auction.end_time)}")
+        end = _format_dt(auction.end_time)
+        if end is not None:
+            lines.append(f"🕐 Окончание (JST): {end}")
+    if auction.is_closed and auction.has_winner is not None:
+        lines.append("✅ Победитель определён" if auction.has_winner else "❌ Победитель не определён")
+    return "\n".join(lines)
+
+
+def _auction_submenu(link, auction, page: int) -> tuple[str, InlineKeyboardMarkup]:
+    mute_label = "🔕 Отключить" if link.notifications_enabled else "🔔 Включить"
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔗 Открыть", url=auction.url)],
+            [
+                InlineKeyboardButton(
+                    text=mute_label,
+                    callback_data=f"mute:{auction.external_id}:{page}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🗑 Удалить",
+                    callback_data=f"del:{auction.external_id}:{page}",
+                )
+            ],
+            [InlineKeyboardButton(text="🔙 Назад", callback_data=f"list:page:{page}")],
+        ]
+    )
+    return _auction_text(link, auction), kb
+
+
+async def _list_content(
+    service: AuctionService, telegram_id: int, page: int = 1
+) -> tuple[str, InlineKeyboardMarkup] | None:
     result = await service.list_for_user(telegram_id)
     if result is None or not result[1]:
         return None
-    user, items = result
-    items = items[:20]
-    lines = ["🎯 Отслеживаемые аукционы:", ""]
+    _user, items = result
+    total_pages = max(1, math.ceil(len(items) / PAGE_SIZE))
+    page = max(1, min(page, total_pages))
+    start = (page - 1) * PAGE_SIZE
+    page_items = items[start : start + PAGE_SIZE]
+
     keyboard_rows = []
-    for link, auction in items:
-        status = "🏁 завершён" if auction.is_closed else "👀 активен"
-        display_title = link.label or auction.title or "Без названия"
-        lines.append(f"{len(keyboard_rows) + 1}. {display_title} ({status})")
-        if auction.current_price is not None:
-            lines.append(f"   💴 {format_price(auction.current_price)}")
-        if auction.end_time is not None and not auction.is_closed:
-            lines.append(f"   ⏰ До конца: {format_remaining(auction.end_time)}")
-        lines.append("")
-        mute_label = "🔔 Включить" if not link.notifications_enabled else "🔕 Отключить"
+    for link, auction in page_items:
+        title = link.label or auction.title or "Без названия"
         keyboard_rows.append(
-            [
-                InlineKeyboardButton(text="🔗 Открыть", url=auction.url),
-                InlineKeyboardButton(
-                    text=mute_label,
-                    callback_data=f"mute:{auction.external_id}",
-                ),
-                InlineKeyboardButton(
-                    text="🗑 Удалить",
-                    callback_data=f"del:{auction.external_id}",
-                ),
-            ]
+            [InlineKeyboardButton(text=title, callback_data=f"auction:{auction.external_id}:{page}")]
         )
-    keyboard_rows.append([InlineKeyboardButton(text="🔙 В меню", callback_data="menu:home")])
-    return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
+
+    nav = []
+    if total_pages > 1:
+        if page > 1:
+            nav.append(InlineKeyboardButton(text="⬅️", callback_data=f"list:page:{page - 1}"))
+        nav.append(InlineKeyboardButton(text=f"{page}/{total_pages}", callback_data="noop"))
+        if page < total_pages:
+            nav.append(InlineKeyboardButton(text="➡️", callback_data=f"list:page:{page + 1}"))
+    nav.append(InlineKeyboardButton(text="🔙 В меню", callback_data="menu:home"))
+    keyboard_rows.append(nav)
+
+    return LIST_HEADER_TEXT, InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
 
 
-async def _show_list(service: AuctionService, telegram_id: int, target: Message | CallbackQuery) -> None:
-    content = await _list_content(service, telegram_id)
+async def _show_list(
+    service: AuctionService, telegram_id: int, target: Message | CallbackQuery, page: int = 1
+) -> None:
+    content = await _list_content(service, telegram_id, page)
     if content is None:
         await _send(target, EMPTY_LIST_TEXT, back_menu_kb())
         return
@@ -224,6 +287,17 @@ def register_handlers(dp: Dispatcher) -> None:
             await _show_list(service, callback.from_user.id, callback)
         await callback.answer()
 
+    @router.callback_query(F.data.startswith("list:page:"))
+    async def cb_list_page(callback: CallbackQuery) -> None:
+        page = int(callback.data.split(":", 2)[2])
+        async with get_service() as service:
+            await _show_list(service, callback.from_user.id, callback, page)
+        await callback.answer()
+
+    @router.callback_query(F.data == "noop")
+    async def cb_noop(callback: CallbackQuery) -> None:
+        await callback.answer()
+
     @router.callback_query(F.data == "menu:add")
     async def cb_add(callback: CallbackQuery) -> None:
         await _edit_or_answer(
@@ -240,29 +314,46 @@ def register_handlers(dp: Dispatcher) -> None:
         await _edit_or_answer(callback, HELP_TEXT, back_menu_kb())
         await callback.answer()
 
+    @router.callback_query(F.data.startswith("auction:"))
+    async def cb_auction(callback: CallbackQuery) -> None:
+        _prefix, external_id, page = callback.data.split(":", 2)
+        page = int(page)
+        async with get_service() as service:
+            item = await service.get_watch_item(callback.from_user.id, external_id)
+            if item is None:
+                await callback.answer("Аукцион не найден.")
+                return
+            text, kb = _auction_submenu(*item, page)
+            await _edit_or_answer(callback, text, kb)
+        await callback.answer()
+
     @router.callback_query(F.data.startswith("del:"))
     async def cb_delete(callback: CallbackQuery) -> None:
-        external_id = callback.data.split(":", 1)[1]
+        _prefix, external_id, page = callback.data.split(":", 2)
+        page = int(page)
         async with get_service() as service:
             result = await service.remove_watch(callback.from_user.id, external_id)
             if result == "removed":
                 await callback.answer("Аукцион удалён из списка.")
-                await _show_list(service, callback.from_user.id, callback)
+                await _show_list(service, callback.from_user.id, callback, page)
             else:
                 await callback.answer("Аукцион не найден в вашем списке.")
 
     @router.callback_query(F.data.startswith("mute:"))
     async def cb_mute(callback: CallbackQuery) -> None:
-        external_id = callback.data.split(":", 1)[1]
+        _prefix, external_id, page = callback.data.split(":", 2)
+        page = int(page)
         async with get_service() as service:
             toggled = await service.toggle_notifications(callback.from_user.id, external_id)
             if toggled is None:
                 await callback.answer("Аукцион не найден.")
-            elif toggled:
-                await callback.answer("Уведомления включены.")
-                await _show_list(service, callback.from_user.id, callback)
-            else:
-                await callback.answer("Уведомления отключены.")
-                await _show_list(service, callback.from_user.id, callback)
+                return
+            await callback.answer("Уведомления включены." if toggled else "Уведомления отключены.")
+            item = await service.get_watch_item(callback.from_user.id, external_id)
+            if item is None:
+                await _show_list(service, callback.from_user.id, callback, page)
+                return
+            text, kb = _auction_submenu(*item, page)
+            await _edit_or_answer(callback, text, kb)
 
     dp.include_router(router)

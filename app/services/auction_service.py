@@ -115,6 +115,19 @@ class AuctionService:
         items = await self.user_auctions.list_for_user(user.id)
         return user, items
 
+    async def get_watch_item(self, telegram_id: int, external_id: str) -> tuple | None:
+        """Возвращает (link, auction) для аукциона из watchlist пользователя или None."""
+        user = await self.users.get_by_telegram_id(telegram_id)
+        if user is None:
+            return None
+        auction = await self.auctions.get_by_external_id(external_id)
+        if auction is None:
+            return None
+        link = await self.user_auctions.get(user.id, auction.id)
+        if link is None:
+            return None
+        return link, auction
+
     async def toggle_notifications(self, telegram_id: int, external_id: str) -> bool | None:
         """Переключает уведомления для аукциона. Возвращает новое значение или None, если не найдено."""
         user = await self.users.get_by_telegram_id(telegram_id)
