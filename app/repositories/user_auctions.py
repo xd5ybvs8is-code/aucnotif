@@ -89,3 +89,11 @@ class UserAuctionRepository:
         link.notifications_enabled = enabled
         await self._session.flush()
         return True
+
+    async def set_label(self, user_id: int, auction_id: int, label: str | None) -> bool:
+        link = await self.get(user_id, auction_id)
+        if link is None:
+            return False
+        link.label = label
+        await self._session.flush()
+        return True

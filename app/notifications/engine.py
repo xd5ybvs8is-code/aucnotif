@@ -35,7 +35,7 @@ class NotificationEngine:
                 row = await self._repo.claim(link.id, decision.kind.value, key)
                 if row is None:
                     continue
-                row.text = renderer.render(decision, url)
+                row.text = renderer.render(decision, url, link.label)
                 created.append(row.id)
         await self._session.flush()
         return created

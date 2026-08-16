@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Boolean, ForeignKey, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, PrimaryKey, TimestampMixin
@@ -16,6 +16,7 @@ class UserAuction(Base, TimestampMixin):
         BigInteger, ForeignKey("auctions.id", ondelete="CASCADE"), nullable=False, index=True
     )
     notifications_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    label: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="user_auctions")  # noqa: F821
     auction: Mapped["Auction"] = relationship(back_populates="user_auctions")  # noqa: F821

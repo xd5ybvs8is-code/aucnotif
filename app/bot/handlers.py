@@ -4,6 +4,7 @@ from aiogram import Dispatcher, F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (
     CallbackQuery,
     InlineKeyboardButton,
@@ -45,6 +46,14 @@ MAIN_MENU_TEXT = "Что будем делать?"
 
 EMPTY_LIST_TEXT = "Список пуст. Отправь ссылку на аукцион, чтобы начать отслеживание."
 
+MAX_LABEL_LENGTH = 255
+
+NAME_PROMPT_TEXT = "Как назвать этот аукцион? Отправь название или /skip, чтобы оставить название лота с Yahoo."
+
+
+class NamingState(StatesGroup):
+    waiting_for_name = State()
+
 
 @asynccontextmanager
 async def get_service():
@@ -70,7 +79,8 @@ async def _list_content(service: AuctionService, telegram_id: int) -> tuple[str,
     keyboard_rows = []
     for link, auction in items:
         status = "🏁 завершён" if auction.is_closed else "👀 активен"
-        lines.append(f"{len(keyboard_rows) + 1}. {auction.title or 'Без названия'} ({status})")
+        display_title = link.label or auction.title or "Без названия"
+        lines.append(f"{len(keyboard_rows) + 1}. {display_title} ({status})")
         if auction.current_price is not None:
             lines.append(f"   💴 {format_price(auction.current_price)}")
         if auction.end_time is not None and not auction.is_closed:
@@ -127,18 +137,19 @@ def register_handlers(dp: Dispatcher) -> None:
             await _show_list(service, message.from_user.id, message)
 
     @router.message(Command("watch"))
-    async def cmd_watch(message: Message) -> None:
+    async def cmd_watch(message: Message, state: FSMContext) -> None:
         url = (message.text or "").partition(" ")[2].strip()
         if not url:
             await message.answer("Формат: /watch &lt;ссылка на аукцион Yahoo&gt;")
             return
-        await _handle_url(message, url)
+        await _handle_url(message, url, state)
 
     @router.message(F.text.startswith("http"))
-    async def handle_url_message(message: Message) -> None:
-        await _handle_url(message, message.text or "")
+    async def handle_url_message(message: Message, state: FSMContext) -> None:
+        await _handle_url(message, message.text or "", state)
 
-    async def _handle_url(message: Message, url: str) -> None:
+    async def _handle_url(message: Message, url: str, state: FSMContext) -> None:
+        await state.clear()
         try:
             async with get_service() as service:
                 result, _user = await service.add_watch(message.from_user.id, url)
@@ -173,6 +184,33 @@ def register_handlers(dp: Dispatcher) -> None:
 
         renderer = NotificationRenderer()
         await message.answer(renderer.render_added(state_from_auction(auction), auction.url))
+        await state.set_state(NamingState.waiting_for_name)
+        await state.update_data(external_id=auction.external_id)
+        await message.answer(NAME_PROMPT_TEXT)
+
+    @router.message(NamingState.waiting_for_name, Command("skip", "cancel"))
+    async def cmd_skip_name(message: Message, state: FSMContext) -> None:
+        await state.clear()
+        await message.answer("Ок, оставлю название лота с Yahoo.")
+
+    @router.message(NamingState.waiting_for_name, F.text)
+    async def handle_name_message(message: Message, state: FSMContext) -> None:
+        data = await state.get_data()
+        external_id = data.get("external_id")
+        label = (message.text or "").strip()[:MAX_LABEL_LENGTH] or None
+        if not external_id:
+            await state.clear()
+            await message.answer("Что-то пошло не так. Добавьте аукцион заново.")
+            return
+        async with get_service() as service:
+            result = await service.set_label(message.from_user.id, external_id, label)
+        await state.clear()
+        if result is None:
+            await message.answer("Аукцион не найден в вашем списке.")
+        elif label:
+            await message.answer(f"✅ Название сохранено: «{label}».")
+        else:
+            await message.answer("Ок, оставлю название лота с Yahoo.")
 
     @router.callback_query(F.data == "menu:home")
     async def cb_menu(callback: CallbackQuery, state: FSMContext) -> None:

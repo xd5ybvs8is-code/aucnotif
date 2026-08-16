@@ -112,6 +112,26 @@ async def test_remove_watch_keeps_other_users(db_session):
     assert auction.monitoring_active is True  # User 222 ещё следит
 
 
+async def test_set_label(db_session):
+    provider = FakeProvider()
+    provider.push(make_state())
+    service = AuctionService(db_session, provider, Settings())
+    url = "https://page.auctions.yahoo.co.jp/jp/auction/f1240539796"
+
+    await service.add_watch(111, url)
+
+    assert await service.set_label(111, "f1240539796", "Моя приставка") is True
+    link = (await db_session.execute(select(UserAuction))).scalar_one()
+    assert link.label == "Моя приставка"
+
+    assert await service.set_label(111, "f1240539796", None) is True
+    await db_session.refresh(link)
+    assert link.label is None
+
+    assert await service.set_label(999, "f1240539796", "x") is None
+    assert await service.set_label(111, "missing", "x") is None
+
+
 async def test_remove_watch_last_user_grace_period(db_session):
     provider = FakeProvider()
     provider.push(make_state())

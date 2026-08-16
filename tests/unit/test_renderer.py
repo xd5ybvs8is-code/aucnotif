@@ -68,3 +68,20 @@ def test_closed_message():
     )
     assert "Аукцион завершён" in text
     assert "Победитель определён" in text
+
+
+def test_label_replaces_title():
+    state = make_state()
+    text = NotificationRenderer().render(
+        _decision(NotificationKind.CHANGE, cur=state), "https://example.com/x", "Моя приставка"
+    )
+    assert "Моя приставка" in text
+    assert "ニンテンドー3DS" not in text
+
+
+def test_label_falls_back_to_title_when_none():
+    state = make_state()
+    text = NotificationRenderer().render(
+        _decision(NotificationKind.CHANGE, cur=state), "https://example.com/x"
+    )
+    assert "ニンテンドー3DS" in text

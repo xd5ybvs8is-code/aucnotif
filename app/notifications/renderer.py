@@ -13,16 +13,16 @@ class NotificationRenderer:
         return f'<a href="{escape(url)}">Открыть аукцион</a>'
 
     @staticmethod
-    def _title(state: AuctionState) -> str:
-        return escape(state.title or "Без названия")
+    def _title(state: AuctionState, label: str | None = None) -> str:
+        return escape(label or state.title or "Без названия")
 
-    def render(self, decision: NotificationDecision, url: str) -> str:
+    def render(self, decision: NotificationDecision, url: str, label: str | None = None) -> str:
         current = decision.current
         previous = decision.previous
         if current is None:
             return "Аукцион недоступен."
 
-        title = self._title(current)
+        title = self._title(current, label)
         if decision.kind == NotificationKind.T_30M:
             return self._header("🔔 До окончания аукциона 30 минут", title, current, url)
         if decision.kind == NotificationKind.T_15M:

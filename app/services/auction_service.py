@@ -131,6 +131,21 @@ class AuctionService:
         await self._session.commit()
         return new_value
 
+    async def set_label(self, telegram_id: int, external_id: str, label: str | None) -> bool | None:
+        """Задаёт пользовательское название для аукциона. Возвращает True/False или None, если не найдено."""
+        user = await self.users.get_by_telegram_id(telegram_id)
+        if user is None:
+            return None
+        auction = await self.auctions.get_by_external_id(external_id)
+        if auction is None:
+            return None
+        link = await self.user_auctions.get(user.id, auction.id)
+        if link is None:
+            return None
+        await self.user_auctions.set_label(user.id, auction.id, label)
+        await self._session.commit()
+        return True
+
     async def get_user(self, telegram_id: int) -> User | None:
         return await self.users.get_by_telegram_id(telegram_id)
 
