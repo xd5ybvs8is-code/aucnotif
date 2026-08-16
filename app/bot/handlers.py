@@ -4,7 +4,6 @@ from aiogram import Dispatcher, F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (
     CallbackQuery,
     InlineKeyboardButton,
@@ -12,16 +11,10 @@ from aiogram.types import (
     Message,
 )
 
-from app.bot.keyboards import back_menu_kb, main_menu_kb, timezone_kb
+from app.bot.keyboards import back_menu_kb, main_menu_kb
 from app.config import get_settings
 from app.db import get_session_factory
-from app.domain.time import (
-    format_price,
-    format_timezone,
-    format_user_time,
-    is_valid_timezone,
-    normalize_utc_offset,
-)
+from app.domain.time import format_price, format_remaining
 from app.domain.validation import InvalidAuctionUrl
 from app.infrastructure.container import get_worker_provider
 from app.notifications.renderer import NotificationRenderer
@@ -39,22 +32,17 @@ HELP_TEXT = (
     "Я отслеживаю аукционы Yahoo Auctions Japan.\n\n"
     "Управление — кнопками:\n"
     "📋 Мои аукционы — список отслеживаемых аукционов\n"
-    "➕ Добавить аукцион — начать отслеживание\n"
-    "🕐 Часовой пояс — настройка времени уведомлений\n\n"
+    "➕ Добавить аукцион — начать отслеживание\n\n"
     "Чтобы начать отслеживание, отправь мне ссылку на аукцион вида:\n"
     "https://page.auctions.yahoo.co.jp/jp/auction/XXXXX\n\n"
     "Уведомления: за 30, 15 и 5 минут до окончания, "
     "при каждой новой ставке и продлении аукциона.\n\n"
-    "Команды на всякий случай: /list, /timezone, /help, /watch &lt;ссылка&gt;"
+    "Команды на всякий случай: /list, /help, /watch &lt;ссылка&gt;"
 )
 
 MAIN_MENU_TEXT = "Что будем делать?"
 
 EMPTY_LIST_TEXT = "Список пуст. Отправь ссылку на аукцион, чтобы начать отслеживание."
-
-
-class TimezoneForm(StatesGroup):
-    waiting_for_offset = State()
 
 
 @asynccontextmanager
@@ -85,7 +73,7 @@ async def _list_content(service: AuctionService, telegram_id: int) -> tuple[str,
         if auction.current_price is not None:
             lines.append(f"   💴 {format_price(auction.current_price)}")
         if auction.end_time is not None and not auction.is_closed:
-            lines.append(f"   ⏰ {format_user_time(auction.end_time, user.timezone)}")
+            lines.append(f"   ⏰ До конца: {format_remaining(auction.end_time)}")
         lines.append("")
         mute_label = "🔔 Включить" if not link.notifications_enabled else "🔕 Отключить"
         keyboard_rows.append(
@@ -137,48 +125,6 @@ def register_handlers(dp: Dispatcher) -> None:
         async with get_service() as service:
             await _show_list(service, message.from_user.id, message)
 
-    @router.message(Command("timezone"))
-    async def cmd_timezone(message: Message) -> None:
-        tz_name = (message.text or "").partition(" ")[2].strip()
-        if not tz_name:
-            async with get_service() as service:
-                user = await service.get_user(message.from_user.id)
-            if user is not None:
-                await message.answer(
-                    f"Текущий часовой пояс: {format_timezone(user.timezone)}\n"
-                    "Сменить: /timezone <UTC+n> или выберите зону в меню.",
-                    reply_markup=back_menu_kb(),
-                )
-            else:
-                await message.answer(
-                    "Часовой пояс пока не задан (по умолчанию UTC+3).\n"
-                    "Сменить: /timezone <UTC+n>, например /timezone UTC+3",
-                    reply_markup=back_menu_kb(),
-                )
-            return
-
-        offset = normalize_utc_offset(tz_name)
-        if offset is not None:
-            async with get_service() as service:
-                await service.set_timezone(message.from_user.id, offset)
-            await message.answer(
-                f"✅ Часовой пояс установлен: {format_timezone(offset)}",
-                reply_markup=back_menu_kb(),
-            )
-            return
-        if is_valid_timezone(tz_name):
-            async with get_service() as service:
-                await service.set_timezone(message.from_user.id, tz_name)
-            await message.answer(
-                f"✅ Часовой пояс установлен: {format_timezone(tz_name)}",
-                reply_markup=back_menu_kb(),
-            )
-            return
-        await message.answer(
-            "❌ Неизвестный часовой пояс. Укажите UTC+n (например UTC+3) "
-            "или название из базы IANA (например Europe/Moscow)."
-        )
-
     @router.message(Command("watch"))
     async def cmd_watch(message: Message) -> None:
         url = (message.text or "").partition(" ")[2].strip()
@@ -194,7 +140,7 @@ def register_handlers(dp: Dispatcher) -> None:
     async def _handle_url(message: Message, url: str) -> None:
         try:
             async with get_service() as service:
-                result, user = await service.add_watch(message.from_user.id, url)
+                result, _user = await service.add_watch(message.from_user.id, url)
         except InvalidAuctionUrl:
             await message.answer(
                 "❌ Некорректная ссылка.\n"
@@ -223,7 +169,7 @@ def register_handlers(dp: Dispatcher) -> None:
             )
             return
 
-        renderer = NotificationRenderer(user.timezone)
+        renderer = NotificationRenderer()
         await message.answer(renderer.render_added(state_from_auction(auction), auction.url))
 
     @router.callback_query(F.data == "menu:home")
@@ -252,60 +198,6 @@ def register_handlers(dp: Dispatcher) -> None:
     async def cb_help(callback: CallbackQuery) -> None:
         await _edit_or_answer(callback, HELP_TEXT, back_menu_kb())
         await callback.answer()
-
-    @router.callback_query(F.data == "menu:tz")
-    async def cb_tz_menu(callback: CallbackQuery) -> None:
-        async with get_service() as service:
-            user = await service.get_user(callback.from_user.id)
-        current = format_timezone(user.timezone) if user else "UTC+3"
-        await _edit_or_answer(
-            callback,
-            f"🕐 Настройка часового пояса\n\nТекущий: {current}\nВыберите зону или введите свою:",
-            timezone_kb(),
-        )
-        await callback.answer()
-
-    @router.callback_query(F.data.startswith("tz:"))
-    async def cb_tz_set(callback: CallbackQuery, state: FSMContext) -> None:
-        value = callback.data.split(":", 1)[1]
-        if value == "manual":
-            await state.set_state(TimezoneForm.waiting_for_offset)
-            await _edit_or_answer(
-                callback,
-                "Напишите часовой пояс в формате UTC+n, например UTC+3 или UTC-5:30.",
-                back_menu_kb(),
-            )
-            await callback.answer()
-            return
-        offset = normalize_utc_offset(value)
-        if offset is None:
-            await callback.answer("Некорректный часовой пояс.")
-            return
-        async with get_service() as service:
-            await service.set_timezone(callback.from_user.id, offset)
-        await _edit_or_answer(
-            callback,
-            f"✅ Часовой пояс установлен: {format_timezone(offset)}",
-            back_menu_kb(),
-        )
-        await callback.answer()
-
-    @router.message(TimezoneForm.waiting_for_offset)
-    async def handle_timezone_input(message: Message, state: FSMContext) -> None:
-        offset = normalize_utc_offset(message.text or "")
-        if offset is None:
-            await message.answer(
-                "❌ Неверный формат. Напишите UTC+n, например UTC+3.",
-                reply_markup=back_menu_kb(),
-            )
-            return
-        async with get_service() as service:
-            await service.set_timezone(message.from_user.id, offset)
-        await state.clear()
-        await message.answer(
-            f"✅ Часовой пояс установлен: {format_timezone(offset)}",
-            reply_markup=back_menu_kb(),
-        )
 
     @router.callback_query(F.data.startswith("del:"))
     async def cb_delete(callback: CallbackQuery) -> None:

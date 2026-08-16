@@ -14,21 +14,11 @@ class UserRepository:
         )
         return result.scalar_one_or_none()
 
-    async def get_or_create(self, telegram_id: int, timezone: str, language: str) -> User:
+    async def get_or_create(self, telegram_id: int, language: str) -> User:
         user = await self.get_by_telegram_id(telegram_id)
         if user is not None:
             return user
-        user = User(telegram_id=telegram_id, timezone=timezone, language=language)
+        user = User(telegram_id=telegram_id, language=language)
         self._session.add(user)
-        await self._session.flush()
-        return user
-
-    async def set_timezone(self, telegram_id: int, timezone: str) -> User:
-        user = await self.get_by_telegram_id(telegram_id)
-        if user is None:
-            user = User(telegram_id=telegram_id, timezone=timezone)
-            self._session.add(user)
-        else:
-            user.timezone = timezone
         await self._session.flush()
         return user

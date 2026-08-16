@@ -15,7 +15,7 @@ URL = "https://page.auctions.yahoo.co.jp/jp/auction/f1240539796"
 
 
 async def _setup(db_session, provider):
-    user = User(telegram_id=111, timezone="Europe/London", language="ru")
+    user = User(telegram_id=111, language="ru")
     db_session.add(user)
     await db_session.flush()
     auction = Auction(
@@ -259,7 +259,7 @@ async def test_30m_notification_for_multiple_users(db_session):
     enqueued = []
     user, auction = await _setup(db_session, provider)
 
-    user2 = User(telegram_id=222, timezone="Europe/London", language="ru")
+    user2 = User(telegram_id=222, language="ru")
     db_session.add(user2)
     await db_session.flush()
     db_session.add(UserAuction(user_id=user2.id, auction_id=auction.id))

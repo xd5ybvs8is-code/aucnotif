@@ -11,8 +11,8 @@ class NotificationEngine:
 
     Для каждого (пользователь, решение) вставляется строка sent_notifications
     с уникальным ключом (user_auction, kind, dedup_key). Текст рендерится сразу
-    в timezone пользователя и сохраняется — worker отправки не зависит от
-    состояния аукциона и безопасен при рестартах.
+    и сохраняется — worker отправки не зависит от состояния аукциона
+    и безопасен при рестартах.
     """
 
     def __init__(self, session: AsyncSession) -> None:
@@ -28,8 +28,8 @@ class NotificationEngine:
     ) -> list[int]:
         """Возвращает id созданных (заявленных) уведомлений для enqueue."""
         created: list[int] = []
-        for user, link in watchers:
-            renderer = NotificationRenderer(user.timezone)
+        for _user, link in watchers:
+            renderer = NotificationRenderer()
             for decision in decisions:
                 key = dedup_key_for(decision, snapshot_id)
                 row = await self._repo.claim(link.id, decision.kind.value, key)

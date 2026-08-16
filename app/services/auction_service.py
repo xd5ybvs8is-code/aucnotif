@@ -46,7 +46,6 @@ class AuctionService:
 
         user = await self.users.get_or_create(
             telegram_id,
-            timezone=self._settings.default_timezone,
             language=self._settings.default_language,
         )
 
@@ -131,11 +130,6 @@ class AuctionService:
         await self.user_auctions.set_notifications_enabled(user.id, auction.id, new_value)
         await self._session.commit()
         return new_value
-
-    async def set_timezone(self, telegram_id: int, timezone: str) -> User:
-        user = await self.users.set_timezone(telegram_id, timezone)
-        await self._session.commit()
-        return user
 
     async def get_user(self, telegram_id: int) -> User | None:
         return await self.users.get_by_telegram_id(telegram_id)

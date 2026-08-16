@@ -2,14 +2,11 @@ from html import escape
 
 from app.domain.auction_state import AuctionState
 from app.domain.notifications import NotificationDecision, NotificationKind
-from app.domain.time import format_price, format_user_time
+from app.domain.time import format_price, format_remaining
 
 
 class NotificationRenderer:
-    """Форматирует тексты уведомлений в timezone пользователя (HTML parse mode)."""
-
-    def __init__(self, timezone_name: str) -> None:
-        self._tz = timezone_name
+    """Форматирует тексты уведомлений (HTML parse mode)."""
 
     @staticmethod
     def _link(url: str) -> str:
@@ -45,8 +42,8 @@ class NotificationRenderer:
             lines = ["⏰ Аукцион продлён", "", f"🎮 {title}"]
             if previous and previous.end_time and current.end_time:
                 lines.append("")
-                lines.append(f"Было: {format_user_time(previous.end_time, self._tz)}")
-                lines.append(f"Стало: {format_user_time(current.end_time, self._tz)}")
+                lines.append(f"Было: {format_remaining(previous.end_time)}")
+                lines.append(f"Стало: {format_remaining(current.end_time)}")
             lines.append("")
             lines.append(self._link(url))
             return "\n".join(lines)
@@ -61,8 +58,8 @@ class NotificationRenderer:
                 lines.append(f"👥 Ставок: {previous.bid_count} → {current.bid_count}")
             if current.end_time is not None and previous.end_time != current.end_time:
                 lines.append(
-                    f"⏰ Окончание: {format_user_time(previous.end_time, self._tz)} → "
-                    f"{format_user_time(current.end_time, self._tz)}"
+                    f"⏰ До конца: {format_remaining(previous.end_time)} → "
+                    f"{format_remaining(current.end_time)}"
                 )
         lines.append("")
         lines.append(self._link(url))
@@ -75,7 +72,7 @@ class NotificationRenderer:
         if state.bid_count is not None:
             lines.append(f"👥 Ставок: {state.bid_count}")
         if state.end_time is not None:
-            lines.append(f"⏰ Окончание: {format_user_time(state.end_time, self._tz)}")
+            lines.append(f"⏰ До конца: {format_remaining(state.end_time)}")
         lines.append("")
         lines.append(self._link(url))
         return "\n".join(lines)
@@ -87,7 +84,7 @@ class NotificationRenderer:
         if state.bid_count is not None:
             lines.append(f"👥 Ставок: {state.bid_count}")
         if state.end_time is not None:
-            lines.append(f"⏰ Окончание: {format_user_time(state.end_time, self._tz)}")
+            lines.append(f"⏰ До конца: {format_remaining(state.end_time)}")
         lines.append("")
         lines.append(self._link(url))
         return "\n".join(lines)

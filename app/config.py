@@ -13,7 +13,6 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     sentry_dsn: str | None = None
     environment: str = "development"
-    default_timezone: str = "Europe/Moscow"
     default_language: str = "ru"
 
     # Yahoo provider

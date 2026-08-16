@@ -159,30 +159,3 @@ async def test_duplicate_notification_prevention(db_session):
         await db_session.execute(select(func.count()).select_from(SentNotification))
     ).scalar_one()
     assert count == 3
-
-
-async def test_set_timezone_updates_user(db_session):
-    service = AuctionService(db_session, FakeProvider(), Settings())
-
-    user = await service.set_timezone(111, "Europe/Moscow")
-    assert user.timezone == "Europe/Moscow"
-
-    user = await service.set_timezone(111, "Asia/Tokyo")
-    assert user.timezone == "Asia/Tokyo"
-
-    fetched = await service.get_user(111)
-    assert fetched is not None
-    assert fetched.timezone == "Asia/Tokyo"
-
-
-async def test_add_watch_does_not_reset_custom_timezone(db_session):
-    provider = FakeProvider()
-    provider.push(make_state())
-    service = AuctionService(db_session, provider, Settings())
-
-    await service.set_timezone(111, "Asia/Tokyo")
-    await service.add_watch(111, "https://page.auctions.yahoo.co.jp/jp/auction/f1240539796")
-
-    user = await service.get_user(111)
-    assert user is not None
-    assert user.timezone == "Asia/Tokyo"
