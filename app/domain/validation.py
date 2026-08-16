@@ -1,7 +1,7 @@
 import re
 
 YAHOO_AUCTION_URL_RE = re.compile(
-    r"^https?://(?:www\.)?page\.auctions\.yahoo\.co\.jp/jp/auction/([a-zA-Z0-9]+)/?(?:\?.*)?$"
+    r"^https?://(?:www\.)?(?:page\.)?auctions\.yahoo\.co\.jp/jp/auction/([a-zA-Z0-9]+)/?(?:\?.*)?$"
 )
 
 
@@ -20,7 +20,8 @@ def validate_auction_url(url: str) -> str:
     match = YAHOO_AUCTION_URL_RE.match(url)
     if not match:
         raise InvalidAuctionUrl(
-            "Допустимы только ссылки вида https://page.auctions.yahoo.co.jp/jp/auction/XXXX"
+            "Допустимы только ссылки вида https://page.auctions.yahoo.co.jp/jp/auction/XXXX "
+            "или https://auctions.yahoo.co.jp/jp/auction/XXXX"
         )
     auction_id = match.group(1)
     return f"https://page.auctions.yahoo.co.jp/jp/auction/{auction_id}"

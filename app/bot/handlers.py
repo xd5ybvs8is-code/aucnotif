@@ -34,7 +34,8 @@ HELP_TEXT = (
     "📋 Мои аукционы — список отслеживаемых аукционов\n"
     "➕ Добавить аукцион — начать отслеживание\n\n"
     "Чтобы начать отслеживание, отправь мне ссылку на аукцион вида:\n"
-    "https://page.auctions.yahoo.co.jp/jp/auction/XXXXX\n\n"
+    "https://page.auctions.yahoo.co.jp/jp/auction/XXXXX или\n"
+    "https://auctions.yahoo.co.jp/jp/auction/XXXXX\n\n"
     "Уведомления: за 30, 15 и 5 минут до окончания, "
     "при каждой новой ставке и продлении аукциона.\n\n"
     "Команды на всякий случай: /list, /help, /watch &lt;ссылка&gt;"
@@ -145,7 +146,8 @@ def register_handlers(dp: Dispatcher) -> None:
             await message.answer(
                 "❌ Некорректная ссылка.\n"
                 "Допустимы только ссылки вида:\n"
-                "https://page.auctions.yahoo.co.jp/jp/auction/XXXXX"
+                "https://page.auctions.yahoo.co.jp/jp/auction/XXXXX или\n"
+                "https://auctions.yahoo.co.jp/jp/auction/XXXXX"
             )
             return
         except RateLimitedError:
@@ -189,7 +191,8 @@ def register_handlers(dp: Dispatcher) -> None:
         await _edit_or_answer(
             callback,
             "Отправьте мне ссылку на аукцион вида:\n"
-            "https://page.auctions.yahoo.co.jp/jp/auction/XXXXX",
+            "https://page.auctions.yahoo.co.jp/jp/auction/XXXXX или\n"
+            "https://auctions.yahoo.co.jp/jp/auction/XXXXX",
             back_menu_kb(),
         )
         await callback.answer()
