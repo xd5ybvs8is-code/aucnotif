@@ -29,6 +29,27 @@ class FakeProvider:
         return self.states.popleft()
 
 
+async def test_add_watch_closed_auction_not_added(db_session):
+    provider = FakeProvider()
+    provider.push(make_state(is_closed=True, has_winner=True))
+    service = AuctionService(db_session, provider, Settings())
+    url = "https://page.auctions.yahoo.co.jp/jp/auction/f1240539796"
+
+    result, _user = await service.add_watch(111, url)
+    assert result.already_watched is False
+    assert result.auction.is_closed is True
+
+    link_count = (
+        await db_session.execute(select(func.count()).select_from(UserAuction))
+    ).scalar_one()
+    assert link_count == 0
+
+    auction = (
+        await db_session.execute(select(Auction).where(Auction.external_id == "f1240539796"))
+    ).scalar_one()
+    assert auction.monitoring_active is False
+
+
 async def test_add_auction_twice_no_duplicates(db_session):
     provider = FakeProvider()
     provider.push(make_state())
@@ -109,7 +130,18 @@ async def test_remove_watch_last_user_grace_period(db_session):
 
 async def test_duplicate_notification_prevention(db_session):
     repo = NotificationRepository(db_session)
-    link = UserAuction(user_id=1, auction_id=1)
+    user = User(telegram_id=1)
+    db_session.add(user)
+    await db_session.flush()
+    auction = Auction(
+        external_id="dup-test",
+        url="https://page.auctions.yahoo.co.jp/jp/auction/dup-test",
+        title="Dup",
+        monitoring_active=True,
+    )
+    db_session.add(auction)
+    await db_session.flush()
+    link = UserAuction(user_id=user.id, auction_id=auction.id)
     db_session.add(link)
     await db_session.flush()
 

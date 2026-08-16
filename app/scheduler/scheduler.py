@@ -79,6 +79,10 @@ class Scheduler:
                     auction.id, now + timedelta(seconds=self._settings.poll_lock_ttl_seconds)
                 )
 
+            removed = await user_auctions_repo.delete_links_for_finalized_auctions()
+            if removed:
+                logger.info("closed_watchlist_cleaned", removed=removed)
+
             await self.recover_pending_notifications(session, arq_pool)
             await self.purge_old_snapshots(session)
 

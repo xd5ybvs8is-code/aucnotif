@@ -1,8 +1,8 @@
-from sqlalchemy import select
+from sqlalchemy import delete, exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models import Auction, User, UserAuction
+from app.models import Auction, SentNotification, User, UserAuction
 
 
 class UserAuctionRepository:
@@ -59,6 +59,28 @@ class UserAuctionRepository:
             .order_by(UserAuction.created_at.desc())
         )
         return [(link, link.auction) for link in result.scalars().unique().all()]
+
+    async def delete_links_for_finalized_auctions(self) -> int:
+        """Удаляет связки пользователей с завершёнными аукционами.
+
+        Связка удаляется только если у неё не осталось pending-уведомлений —
+        финальное уведомление о закрытии успеет дойти до пользователя.
+        """
+        closed_auction_ids = select(Auction.id).where(Auction.is_closed.is_(True))
+        pending_notification = exists(
+            select(SentNotification.id).where(
+                SentNotification.user_auction_id == UserAuction.id,
+                SentNotification.status == "pending",
+            )
+        )
+        result = await self._session.execute(
+            delete(UserAuction).where(
+                UserAuction.auction_id.in_(closed_auction_ids),
+                ~pending_notification,
+            )
+        )
+        await self._session.flush()
+        return result.rowcount
 
     async def set_notifications_enabled(self, user_id: int, auction_id: int, enabled: bool) -> bool:
         link = await self.get(user_id, auction_id)

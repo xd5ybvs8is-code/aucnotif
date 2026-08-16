@@ -5,6 +5,8 @@ from sqlalchemy import func, select
 from app.config import Settings
 from app.models import Auction, AuctionSnapshot, SentNotification, User, UserAuction
 from app.providers.base import AntiBotError, RateLimitedError
+from app.repositories.notifications import NotificationRepository
+from app.repositories.user_auctions import UserAuctionRepository
 from app.services.monitoring_service import MonitoringService
 from tests.conftest import make_state
 from tests.integration.test_auction_service import FakeProvider
@@ -162,6 +164,59 @@ async def test_closed_auction_stops_monitoring(db_session):
         await db_session.execute(select(SentNotification))
     ).scalars().all()
     assert [n.kind for n in notifications] == ["closed"]
+
+
+async def _close_auction(db_session, provider, auction):
+    enqueued = []
+    provider.push(make_state(observed_at=datetime.now(UTC)))
+    service = _make_service(db_session, provider, enqueued)
+    await service.poll(auction.id)
+    provider.push(make_state(is_closed=True, has_winner=True, observed_at=datetime.now(UTC)))
+    await service.poll(auction.id)
+    return (await db_session.execute(select(SentNotification))).scalars().all()
+
+
+async def test_closed_links_kept_while_notification_pending(db_session):
+    provider = FakeProvider()
+    user, auction = await _setup(db_session, provider)
+    await _close_auction(db_session, provider, auction)
+
+    repo = UserAuctionRepository(db_session)
+    removed = await repo.delete_links_for_finalized_auctions()
+    assert removed == 0  # финальное уведомление ещё pending — не удаляем
+    assert await _count(db_session, UserAuction) == 1
+
+
+async def test_closed_links_removed_after_notification_sent(db_session):
+    provider = FakeProvider()
+    user, auction = await _setup(db_session, provider)
+    notifications = await _close_auction(db_session, provider, auction)
+
+    notification_repo = NotificationRepository(db_session)
+    for notification in notifications:
+        await notification_repo.mark_sent(notification.id)
+    await db_session.commit()
+
+    repo = UserAuctionRepository(db_session)
+    removed = await repo.delete_links_for_finalized_auctions()
+    assert removed == 1
+    assert await _count(db_session, UserAuction) == 0
+
+
+async def test_closed_links_removed_after_notification_failed(db_session):
+    provider = FakeProvider()
+    user, auction = await _setup(db_session, provider)
+    notifications = await _close_auction(db_session, provider, auction)
+
+    notification_repo = NotificationRepository(db_session)
+    for notification in notifications:
+        await notification_repo.mark_failed(notification.id)
+    await db_session.commit()
+
+    repo = UserAuctionRepository(db_session)
+    removed = await repo.delete_links_for_finalized_auctions()
+    assert removed == 1
+    assert await _count(db_session, UserAuction) == 0
 
 
 async def test_rate_limited_backoff(db_session):

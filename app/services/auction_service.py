@@ -61,6 +61,11 @@ class AuctionService:
                 )
             auction = await self.auctions.create(canonical_url, external_id, state)
 
+        if auction.is_closed:
+            # Завершённые аукционы не добавляются в watchlist и не мониторятся.
+            await self._session.commit()
+            return AddAuctionResult(auction, already_watched=False), user
+
         link = await self.user_auctions.get(user.id, auction.id)
         if link is not None:
             # Повторное добавление — не создаём дублей.
